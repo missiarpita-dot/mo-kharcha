@@ -2,28 +2,31 @@ const fs = require('fs');
 const path = require('path');
 
 const dataDir = path.join(__dirname, 'data');
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
-}
-
 const dbFile = path.join(dataDir, 'db.json');
+const tmpDbFile = path.join('/tmp', 'db.json');
 
-function initDb() {
-  if (!fs.existsSync(dbFile)) {
-    const initialData = {
-      months: [],
-      expenses: [],
-      payments: []
-    };
-    fs.writeFileSync(dbFile, JSON.stringify(initialData, null, 2), 'utf-8');
+function getDbFilePath() {
+  if (process.env.VERCEL) {
+    if (!fs.existsSync(tmpDbFile)) {
+      try {
+        if (fs.existsSync(dbFile)) {
+          fs.copyFileSync(dbFile, tmpDbFile);
+        } else {
+          fs.writeFileSync(tmpDbFile, JSON.stringify({ months: [], expenses: [], payments: [] }, null, 2), 'utf-8');
+        }
+      } catch (e) {
+        return dbFile;
+      }
+    }
+    return tmpDbFile;
   }
+  return dbFile;
 }
-
-initDb();
 
 function readDb() {
   try {
-    const raw = fs.readFileSync(dbFile, 'utf-8');
+    const targetFile = getDbFilePath();
+    const raw = fs.readFileSync(targetFile, 'utf-8');
     return JSON.parse(raw);
   } catch (err) {
     return { months: [], expenses: [], payments: [] };
@@ -31,7 +34,12 @@ function readDb() {
 }
 
 function writeDb(data) {
-  fs.writeFileSync(dbFile, JSON.stringify(data, null, 2), 'utf-8');
+  try {
+    const targetFile = getDbFilePath();
+    fs.writeFileSync(targetFile, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Write DB error:', err.message);
+  }
 }
 
 module.exports = {
