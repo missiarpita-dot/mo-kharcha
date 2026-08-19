@@ -37,6 +37,18 @@ function writeDb(data) {
   try {
     const targetFile = getDbFilePath();
     fs.writeFileSync(targetFile, JSON.stringify(data, null, 2), 'utf-8');
+    
+    // Auto sync to Desktop Excel file
+    if (!process.env.VERCEL) {
+      setTimeout(() => {
+        try {
+          const { syncDesktopExcel } = require('./excelSync');
+          syncDesktopExcel();
+        } catch (err) {
+          console.error('Desktop Excel Sync error:', err.message);
+        }
+      }, 100);
+    }
   } catch (err) {
     console.error('Write DB error:', err.message);
   }
