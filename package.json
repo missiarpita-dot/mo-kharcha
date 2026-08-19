@@ -2,9 +2,10 @@
   "name": "mo-kharcha",
   "version": "1.0.0",
   "private": true,
+  "main": "server.js",
   "scripts": {
     "build": "cd frontend && npm install && npm run build",
-    "start": "cd backend && node server.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
