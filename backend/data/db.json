@@ -1,0 +1,96 @@
+{
+  "months": [
+    {
+      "id": 1,
+      "name": "July 2026",
+      "year": 2026,
+      "month": 7,
+      "created_at": "2026-07-01T00:00:00.000Z"
+    },
+    {
+      "id": 2,
+      "name": "August 2026",
+      "year": 2026,
+      "month": 8,
+      "created_at": "2026-08-01T00:00:00.000Z"
+    }
+  ],
+  "expenses": [
+    {
+      "id": 1,
+      "month_id": 1,
+      "date": "2026-07-03",
+      "category": "Electricity",
+      "description": "Electric bill",
+      "amount": 2194,
+      "paid_from": "Own Money",
+      "status": "Due from Father"
+    },
+    {
+      "id": 3,
+      "month_id": 1,
+      "date": "2026-07-07",
+      "category": "Newspaper",
+      "description": "Newspaper bill",
+      "amount": 300,
+      "paid_from": "Father's Money",
+      "status": "Settled"
+    },
+    {
+      "id": 4,
+      "month_id": 1,
+      "date": "2026-07-10",
+      "category": "Groceries",
+      "description": "Ration/grocery expense",
+      "amount": 3200,
+      "paid_from": "Own Money",
+      "status": "Due from Father"
+    },
+    {
+      "id": 5,
+      "month_id": 1,
+      "date": "2026-07-12",
+      "category": "Medicine",
+      "description": "Mother's homeopathy medicine",
+      "amount": 970,
+      "paid_from": "Own Money",
+      "status": "Due from Father"
+    },
+    {
+      "id": 6,
+      "month_id": 2,
+      "date": "2026-08-04",
+      "category": "Electricity",
+      "description": "Electric bill",
+      "amount": 2050,
+      "paid_from": "Own Money",
+      "status": "Due from Father"
+    },
+    {
+      "id": 7,
+      "month_id": 2,
+      "date": "2026-08-06",
+      "category": "Water",
+      "description": "Water bill",
+      "amount": 420,
+      "paid_from": "Father's Money",
+      "status": "Settled"
+    }
+  ],
+  "payments": [
+    {
+      "id": 1,
+      "month_id": 1,
+      "date": "2026-07-02",
+      "amount": 6000,
+      "note": "July allowance"
+    },
+    {
+      "id": 2,
+      "month_id": 2,
+      "date": "2026-08-03",
+      "amount": 8000,
+      "note": "August allowance + July balance adjustment"
+    }
+  ]
+}
