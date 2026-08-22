@@ -59,22 +59,22 @@
     {
       "id": 6,
       "month_id": 2,
-      "date": "2026-08-04",
+      "date": "2026-08-18",
       "category": "Electricity",
-      "description": "Electric bill",
-      "amount": 2050,
+      "description": "",
+      "amount": 1049,
       "paid_from": "Own Money",
       "status": "Due from Father"
     },
     {
       "id": 7,
       "month_id": 2,
-      "date": "2026-08-06",
-      "category": "Water",
-      "description": "Water bill",
-      "amount": 420,
-      "paid_from": "Father's Money",
-      "status": "Settled"
+      "date": "2026-08-19",
+      "category": "Internet",
+      "description": "Jio fiber bill",
+      "amount": 706.82,
+      "paid_from": "Own Money",
+      "status": "Due from Father"
     }
   ],
   "payments": [
@@ -84,13 +84,6 @@
       "date": "2026-07-02",
       "amount": 6000,
       "note": "July allowance"
-    },
-    {
-      "id": 2,
-      "month_id": 2,
-      "date": "2026-08-03",
-      "amount": 8000,
-      "note": "August allowance + July balance adjustment"
     }
   ]
 }

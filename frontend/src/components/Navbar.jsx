@@ -1,10 +1,12 @@
 import { Link } from 'react-router-dom'
-import { Home, IndianRupee } from 'lucide-react'
+import { Home, IndianRupee, Lock, KeyRound } from 'lucide-react'
 import { exportExcel } from '../api'
 import { useState } from 'react'
+import ChangePinModal from './ChangePinModal'
 
-export default function Navbar() {
+export default function Navbar({ onLock }) {
   const [exporting, setExporting] = useState(false)
+  const [showChangePin, setShowChangePin] = useState(false)
 
   const handleExport = async () => {
     setExporting(true)
@@ -34,18 +36,39 @@ export default function Navbar() {
             <Home size={16} />
             <span className="hidden sm:inline">Overview</span>
           </Link>
+
+          <button
+            onClick={() => setShowChangePin(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-800 hover:bg-blue-700 text-blue-200 hover:text-white rounded-lg text-xs font-medium transition-colors"
+            title="Change PIN"
+          >
+            <KeyRound size={14} />
+            <span className="hidden md:inline">PIN</span>
+          </button>
+
+          <button
+            onClick={onLock}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-800 hover:bg-red-700 text-blue-200 hover:text-white rounded-lg text-xs font-medium transition-colors"
+            title="Lock App"
+          >
+            <Lock size={14} />
+            <span className="hidden md:inline">Lock</span>
+          </button>
+
           <button
             onClick={handleExport}
             disabled={exporting}
-            className="flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-400 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-60"
+            className="flex items-center gap-2 px-3.5 py-1.5 bg-green-600 hover:bg-green-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-60"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
-            {exporting ? 'Exporting…' : 'Export Excel'}
+            <span className="hidden sm:inline">{exporting ? 'Exporting…' : 'Export Excel'}</span>
           </button>
         </div>
       </div>
+
+      {showChangePin && <ChangePinModal onClose={() => setShowChangePin(false)} />}
     </nav>
   )
 }
