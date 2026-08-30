@@ -9,6 +9,9 @@ export default function App() {
   const [isUnlocked, setIsUnlocked] = useState(false)
 
   useEffect(() => {
+    // Clear any legacy client-side cached pins
+    localStorage.removeItem('kharcha_pin')
+    
     const status = sessionStorage.getItem('kharcha_unlocked') === 'true'
     setIsUnlocked(status)
   }, [])
