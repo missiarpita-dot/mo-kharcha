@@ -33,10 +33,17 @@ CREATE TABLE IF NOT EXISTS public.payments (
   note TEXT DEFAULT ''
 );
 
--- 4. Enable Row Level Security (RLS) & allow public read/write with anon key
+-- 4. Create 'app_settings' table for centralized secure PIN & configuration
+CREATE TABLE IF NOT EXISTS public.app_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
+-- 5. Enable Row Level Security (RLS) & allow public read/write with anon key
 ALTER TABLE public.months ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Allow all operations on months" ON public.months
   FOR ALL USING (true) WITH CHECK (true);
@@ -47,14 +54,16 @@ CREATE POLICY "Allow all operations on expenses" ON public.expenses
 CREATE POLICY "Allow all operations on payments" ON public.payments
   FOR ALL USING (true) WITH CHECK (true);
 
--- 5. Seed Initial Data (July 2026 & August 2026 from original Excel)
+CREATE POLICY "Allow all operations on app_settings" ON public.app_settings
+  FOR ALL USING (true) WITH CHECK (true);
+
+-- 6. Seed Initial Data
 INSERT INTO public.months (id, name, year, month, created_at)
 VALUES 
   (1, 'July 2026', 2026, 7, '2026-07-01T00:00:00.000Z'),
   (2, 'August 2026', 2026, 8, '2026-08-01T00:00:00.000Z')
 ON CONFLICT (year, month) DO NOTHING;
 
--- Reset sequence for months
 SELECT setval('public.months_id_seq', (SELECT COALESCE(MAX(id), 1) FROM public.months));
 
 INSERT INTO public.expenses (month_id, date, category, description, amount, paid_from, status)
@@ -73,3 +82,7 @@ VALUES
   (1, '2026-07-02', 6000, 'July allowance'),
   (2, '2026-08-03', 8000, 'August allowance + July balance adjustment')
 ON CONFLICT DO NOTHING;
+
+INSERT INTO public.app_settings (key, value)
+VALUES ('app_pin', '1234')
+ON CONFLICT (key) DO NOTHING;
