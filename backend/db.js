@@ -28,9 +28,12 @@ for (const ep of envPaths) {
   }
 }
 
-// ─── Supabase Client Setup ───────────────────────────────────────────────────
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY;
+// ─── Supabase Client Setup with Guaranteed Cloud Fallback ───────────────────
+const DEFAULT_SUPABASE_URL = 'https://zbjzrdasvdlenvfmrsjd.supabase.co';
+const DEFAULT_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpianpyZGFzdmRsZW52Zm1yc2pkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgwOTIwNzgsImV4cCI6MjEwMzY2ODA3OH0.Ep_opStvzEO9XYZat0RSS2tN4ETljyafBMAhxmajA5E';
+
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY || process.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_KEY;
 
 let supabase = null;
 if (SUPABASE_URL && SUPABASE_KEY) {
@@ -38,35 +41,14 @@ if (SUPABASE_URL && SUPABASE_KEY) {
     supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
       auth: { persistSession: false }
     });
-    console.log('✅ Supabase Client initialized successfully');
+    console.log('✅ Supabase Client initialized successfully with URL:', SUPABASE_URL);
   } catch (err) {
-    console.error('⚠️ Supabase init failed, using local JSON fallback:', err.message);
+    console.error('⚠️ Supabase init failed:', err.message);
   }
 }
 
 function isSupabaseReady() {
   return supabase !== null;
-}
-
-// ─── Local JSON fallback (for offline / local dev) ───────────────────────────
-const dataDir = path.join(__dirname, 'data');
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-const dbFile = path.join(dataDir, 'db.json');
-
-function readLocal() {
-  try {
-    return JSON.parse(fs.readFileSync(dbFile, 'utf-8'));
-  } catch {
-    return { months: [], expenses: [], payments: [], pin: '1234' };
-  }
-}
-
-function writeLocal(data) {
-  try {
-    fs.writeFileSync(dbFile, JSON.stringify(data, null, 2), 'utf-8');
-  } catch (err) {
-    console.error('Local write error:', err.message);
-  }
 }
 
 // ─── Universal Database Adapter ──────────────────────────────────────────────
@@ -82,11 +64,10 @@ const db = {
       if (!error && data && data.value) {
         return String(data.value).trim();
       }
-      await supabase.from('app_settings').upsert({ key: 'app_pin', value: '1234' });
-      return '1234';
+      await supabase.from('app_settings').upsert({ key: 'app_pin', value: '1986' });
+      return '1986';
     }
-    const local = readLocal();
-    return String(local.pin || '1234').trim();
+    return '1986';
   },
 
   async setPin(newPin) {
@@ -98,9 +79,6 @@ const db = {
       if (error) throw error;
       return true;
     }
-    const local = readLocal();
-    local.pin = cleanPin;
-    writeLocal(local);
     return true;
   },
 
@@ -115,8 +93,7 @@ const db = {
       if (error) throw error;
       return data || [];
     }
-    const local = readLocal();
-    return [...local.months].sort((a, b) => (a.year !== b.year ? a.year - b.year : a.month - b.month));
+    return [];
   },
 
   async getMonthById(id) {
@@ -129,8 +106,7 @@ const db = {
       if (error && error.code !== 'PGRST116') throw error;
       return data || null;
     }
-    const local = readLocal();
-    return local.months.find((m) => String(m.id) === String(id)) || null;
+    return null;
   },
 
   async createMonth({ name, year, month }) {
@@ -151,15 +127,7 @@ const db = {
       if (error) throw error;
       return data;
     }
-    const local = readLocal();
-    if (local.months.some((m) => m.year === year && m.month === month)) {
-      throw new Error('This month already exists');
-    }
-    const newId = local.months.length > 0 ? Math.max(...local.months.map((m) => m.id)) + 1 : 1;
-    const newMonth = { id: newId, name, year, month, created_at: new Date().toISOString() };
-    local.months.push(newMonth);
-    writeLocal(local);
-    return newMonth;
+    throw new Error('Database not ready');
   },
 
   async deleteMonth(id) {
@@ -170,11 +138,7 @@ const db = {
       if (error) throw error;
       return;
     }
-    const local = readLocal();
-    local.months = local.months.filter((m) => String(m.id) !== String(id));
-    local.expenses = local.expenses.filter((e) => String(e.month_id) !== String(id));
-    local.payments = local.payments.filter((p) => String(p.month_id) !== String(id));
-    writeLocal(local);
+    throw new Error('Database not ready');
   },
 
   // ── Expenses ─────────────────────────────────────────────────────────────────
@@ -189,9 +153,7 @@ const db = {
       if (error) throw error;
       return data || [];
     }
-    return readLocal()
-      .expenses.filter((e) => String(e.month_id) === String(monthId))
-      .sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
+    return [];
   },
 
   async createExpense({ month_id, date, category, description, amount, paid_from }) {
@@ -200,7 +162,7 @@ const db = {
       const { data, error } = await supabase
         .from('expenses')
         .insert([{
-          month_id,
+          month_id: parseInt(month_id),
           date,
           category,
           description: description || '',
@@ -213,21 +175,7 @@ const db = {
       if (error) throw error;
       return data;
     }
-    const local = readLocal();
-    const newId = local.expenses.length > 0 ? Math.max(...local.expenses.map((e) => e.id)) + 1 : 1;
-    const newExp = {
-      id: newId,
-      month_id: parseInt(month_id),
-      date,
-      category,
-      description: description || '',
-      amount: parseFloat(amount),
-      paid_from,
-      status
-    };
-    local.expenses.push(newExp);
-    writeLocal(local);
-    return newExp;
+    throw new Error('Database not ready');
   },
 
   async updateExpense(id, { date, category, description, amount, paid_from }) {
@@ -249,20 +197,7 @@ const db = {
       if (error) throw error;
       return data;
     }
-    const local = readLocal();
-    const idx = local.expenses.findIndex((e) => String(e.id) === String(id));
-    if (idx === -1) return null;
-    local.expenses[idx] = {
-      ...local.expenses[idx],
-      date,
-      category,
-      description: description || '',
-      amount: parseFloat(amount),
-      paid_from,
-      status
-    };
-    writeLocal(local);
-    return local.expenses[idx];
+    throw new Error('Database not ready');
   },
 
   async deleteExpense(id) {
@@ -271,9 +206,7 @@ const db = {
       if (error) throw error;
       return;
     }
-    const local = readLocal();
-    local.expenses = local.expenses.filter((e) => String(e.id) !== String(id));
-    writeLocal(local);
+    throw new Error('Database not ready');
   },
 
   // ── Payments ─────────────────────────────────────────────────────────────────
@@ -288,9 +221,7 @@ const db = {
       if (error) throw error;
       return data || [];
     }
-    return readLocal()
-      .payments.filter((p) => String(p.month_id) === String(monthId))
-      .sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
+    return [];
   },
 
   async createPayment({ month_id, date, amount, note }) {
@@ -298,7 +229,7 @@ const db = {
       const { data, error } = await supabase
         .from('payments')
         .insert([{
-          month_id,
+          month_id: parseInt(month_id),
           date,
           amount: parseFloat(amount),
           note: note || ''
@@ -308,18 +239,7 @@ const db = {
       if (error) throw error;
       return data;
     }
-    const local = readLocal();
-    const newId = local.payments.length > 0 ? Math.max(...local.payments.map((p) => p.id)) + 1 : 1;
-    const newPay = {
-      id: newId,
-      month_id: parseInt(month_id),
-      date,
-      amount: parseFloat(amount),
-      note: note || ''
-    };
-    local.payments.push(newPay);
-    writeLocal(local);
-    return newPay;
+    throw new Error('Database not ready');
   },
 
   async updatePayment(id, { date, amount, note }) {
@@ -337,17 +257,7 @@ const db = {
       if (error) throw error;
       return data;
     }
-    const local = readLocal();
-    const idx = local.payments.findIndex((p) => String(p.id) === String(id));
-    if (idx === -1) return null;
-    local.payments[idx] = {
-      ...local.payments[idx],
-      date,
-      amount: parseFloat(amount),
-      note: note || ''
-    };
-    writeLocal(local);
-    return local.payments[idx];
+    throw new Error('Database not ready');
   },
 
   async deletePayment(id) {
@@ -356,9 +266,7 @@ const db = {
       if (error) throw error;
       return;
     }
-    const local = readLocal();
-    local.payments = local.payments.filter((p) => String(p.id) !== String(id));
-    writeLocal(local);
+    throw new Error('Database not ready');
   }
 };
 
