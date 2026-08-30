@@ -1,59 +1,56 @@
-const mongoose = require('mongoose');
+const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 const path = require('path');
 
-// ─── MongoDB Connection ───────────────────────────────────────────────────────
-const MONGO_URI = process.env.MONGO_URI;
-
-let mongoConnected = false;
-
-async function connectMongo() {
-  if (MONGO_URI && !mongoConnected) {
+// ─── Auto-load .env file if present ──────────────────────────────────────────
+const envPaths = [
+  path.join(__dirname, '..', '.env'),
+  path.join(__dirname, '.env')
+];
+for (const ep of envPaths) {
+  if (fs.existsSync(ep)) {
     try {
-      await mongoose.connect(MONGO_URI, { serverSelectionTimeoutMS: 5000 });
-      mongoConnected = true;
-      console.log('✅ MongoDB Atlas connected');
-    } catch (err) {
-      console.error('⚠️ MongoDB connection failed, using local JSON fallback:', err.message);
-    }
+      const content = fs.readFileSync(ep, 'utf-8');
+      content.split(/\r?\n/).forEach((line) => {
+        const trimmed = line.trim();
+        if (trimmed && !trimmed.startsWith('#')) {
+          const idx = trimmed.indexOf('=');
+          if (idx !== -1) {
+            const key = trimmed.substring(0, idx).trim();
+            const val = trimmed.substring(idx + 1).trim();
+            if (!process.env[key]) {
+              process.env[key] = val;
+            }
+          }
+        }
+      });
+    } catch {}
   }
 }
 
-connectMongo();
+// ─── Supabase Client Setup ───────────────────────────────────────────────────
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY;
 
-// ─── Mongoose Schemas ─────────────────────────────────────────────────────────
-const MonthSchema = new mongoose.Schema({
-  name:       { type: String, required: true },
-  year:       { type: Number, required: true },
-  month:      { type: Number, required: true },
-  created_at: { type: String, default: () => new Date().toISOString() }
-});
+let supabase = null;
+if (SUPABASE_URL && SUPABASE_KEY) {
+  try {
+    supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: { persistSession: false }
+    });
+    console.log('✅ Supabase Client initialized successfully');
+  } catch (err) {
+    console.error('⚠️ Supabase init failed, using local JSON fallback:', err.message);
+  }
+}
 
-const ExpenseSchema = new mongoose.Schema({
-  month_id:    { type: mongoose.Schema.Types.ObjectId, ref: 'Month', required: true },
-  date:        { type: String, required: true },
-  category:    { type: String, required: true },
-  description: { type: String, default: '' },
-  amount:      { type: Number, required: true },
-  paid_from:   { type: String, required: true },
-  status:      { type: String, required: true }
-});
+function isSupabaseReady() {
+  return supabase !== null;
+}
 
-const PaymentSchema = new mongoose.Schema({
-  month_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Month', required: true },
-  date:     { type: String, required: true },
-  amount:   { type: Number, required: true },
-  note:     { type: String, default: '' }
-});
-
-const MonthModel   = mongoose.models.Month   || mongoose.model('Month',   MonthSchema);
-const ExpenseModel = mongoose.models.Expense || mongoose.model('Expense', ExpenseSchema);
-const PaymentModel = mongoose.models.Payment || mongoose.model('Payment', PaymentSchema);
-
-// ─── Local JSON fallback ──────────────────────────────────────────────────────
+// ─── Local JSON fallback (for offline / local dev) ───────────────────────────
 const dataDir = path.join(__dirname, 'data');
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-
 const dbFile = path.join(dataDir, 'db.json');
 
 function readLocal() {
@@ -72,44 +69,60 @@ function writeLocal(data) {
   }
 }
 
-// ─── DB Adapter: works with either MongoDB or local JSON ──────────────────────
-function isMongoReady() {
-  return mongoConnected && mongoose.connection.readyState === 1;
-}
-
+// ─── Universal Database Adapter ──────────────────────────────────────────────
 const db = {
   // ── Months ──────────────────────────────────────────────────────────────────
   async getAllMonths() {
-    if (isMongoReady()) {
-      const docs = await MonthModel.find().sort({ year: 1, month: 1 });
-      return docs.map(d => ({ id: d._id.toString(), name: d.name, year: d.year, month: d.month, created_at: d.created_at }));
+    if (isSupabaseReady()) {
+      const { data, error } = await supabase
+        .from('months')
+        .select('*')
+        .order('year', { ascending: true })
+        .order('month', { ascending: true });
+      if (error) throw error;
+      return data || [];
     }
     const local = readLocal();
-    return [...local.months].sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month);
+    return [...local.months].sort((a, b) => (a.year !== b.year ? a.year - b.year : a.month - b.month));
   },
 
   async getMonthById(id) {
-    if (isMongoReady()) {
-      try {
-        const d = await MonthModel.findById(id);
-        if (!d) return null;
-        return { id: d._id.toString(), name: d.name, year: d.year, month: d.month, created_at: d.created_at };
-      } catch { return null; }
+    if (isSupabaseReady()) {
+      const { data, error } = await supabase
+        .from('months')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (error && error.code !== 'PGRST116') throw error;
+      return data || null;
     }
     const local = readLocal();
-    return local.months.find(m => String(m.id) === String(id)) || null;
+    return local.months.find((m) => String(m.id) === String(id)) || null;
   },
 
   async createMonth({ name, year, month }) {
-    if (isMongoReady()) {
-      const exists = await MonthModel.findOne({ year, month });
-      if (exists) throw new Error('This month already exists');
-      const doc = await MonthModel.create({ name, year, month });
-      return { id: doc._id.toString(), name: doc.name, year: doc.year, month: doc.month, created_at: doc.created_at };
+    if (isSupabaseReady()) {
+      const { data: existing } = await supabase
+        .from('months')
+        .select('id')
+        .eq('year', year)
+        .eq('month', month)
+        .maybeSingle();
+      if (existing) throw new Error('This month already exists');
+
+      const { data, error } = await supabase
+        .from('months')
+        .insert([{ name, year: parseInt(year), month: parseInt(month) }])
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
     }
     const local = readLocal();
-    if (local.months.some(m => m.year === year && m.month === month)) throw new Error('This month already exists');
-    const newId = local.months.length > 0 ? Math.max(...local.months.map(m => m.id)) + 1 : 1;
+    if (local.months.some((m) => m.year === year && m.month === month)) {
+      throw new Error('This month already exists');
+    }
+    const newId = local.months.length > 0 ? Math.max(...local.months.map((m) => m.id)) + 1 : 1;
     const newMonth = { id: newId, name, year, month, created_at: new Date().toISOString() };
     local.months.push(newMonth);
     writeLocal(local);
@@ -117,37 +130,68 @@ const db = {
   },
 
   async deleteMonth(id) {
-    if (isMongoReady()) {
-      await MonthModel.findByIdAndDelete(id);
-      await ExpenseModel.deleteMany({ month_id: id });
-      await PaymentModel.deleteMany({ month_id: id });
+    if (isSupabaseReady()) {
+      await supabase.from('expenses').delete().eq('month_id', id);
+      await supabase.from('payments').delete().eq('month_id', id);
+      const { error } = await supabase.from('months').delete().eq('id', id);
+      if (error) throw error;
       return;
     }
     const local = readLocal();
-    local.months = local.months.filter(m => String(m.id) !== String(id));
-    local.expenses = local.expenses.filter(e => String(e.month_id) !== String(id));
-    local.payments = local.payments.filter(p => String(p.month_id) !== String(id));
+    local.months = local.months.filter((m) => String(m.id) !== String(id));
+    local.expenses = local.expenses.filter((e) => String(e.month_id) !== String(id));
+    local.payments = local.payments.filter((p) => String(p.month_id) !== String(id));
     writeLocal(local);
   },
 
   // ── Expenses ─────────────────────────────────────────────────────────────────
   async getExpensesByMonth(monthId) {
-    if (isMongoReady()) {
-      const docs = await ExpenseModel.find({ month_id: monthId }).sort({ date: 1 });
-      return docs.map(d => ({ id: d._id.toString(), month_id: d.month_id.toString(), date: d.date, category: d.category, description: d.description, amount: d.amount, paid_from: d.paid_from, status: d.status }));
+    if (isSupabaseReady()) {
+      const { data, error } = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('month_id', monthId)
+        .order('date', { ascending: true })
+        .order('id', { ascending: true });
+      if (error) throw error;
+      return data || [];
     }
-    return readLocal().expenses.filter(e => String(e.month_id) === String(monthId)).sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
+    return readLocal()
+      .expenses.filter((e) => String(e.month_id) === String(monthId))
+      .sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
   },
 
   async createExpense({ month_id, date, category, description, amount, paid_from }) {
     const status = paid_from === 'Own Money' ? 'Due from Father' : 'Settled';
-    if (isMongoReady()) {
-      const doc = await ExpenseModel.create({ month_id, date, category, description: description || '', amount, paid_from, status });
-      return { id: doc._id.toString(), month_id: doc.month_id.toString(), date: doc.date, category: doc.category, description: doc.description, amount: doc.amount, paid_from: doc.paid_from, status: doc.status };
+    if (isSupabaseReady()) {
+      const { data, error } = await supabase
+        .from('expenses')
+        .insert([{
+          month_id,
+          date,
+          category,
+          description: description || '',
+          amount: parseFloat(amount),
+          paid_from,
+          status
+        }])
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
     }
     const local = readLocal();
-    const newId = local.expenses.length > 0 ? Math.max(...local.expenses.map(e => e.id)) + 1 : 1;
-    const newExp = { id: newId, month_id: parseInt(month_id), date, category, description: description || '', amount: parseFloat(amount), paid_from, status };
+    const newId = local.expenses.length > 0 ? Math.max(...local.expenses.map((e) => e.id)) + 1 : 1;
+    const newExp = {
+      id: newId,
+      month_id: parseInt(month_id),
+      date,
+      category,
+      description: description || '',
+      amount: parseFloat(amount),
+      paid_from,
+      status
+    };
     local.expenses.push(newExp);
     writeLocal(local);
     return newExp;
@@ -155,74 +199,134 @@ const db = {
 
   async updateExpense(id, { date, category, description, amount, paid_from }) {
     const status = paid_from === 'Own Money' ? 'Due from Father' : 'Settled';
-    if (isMongoReady()) {
-      const doc = await ExpenseModel.findByIdAndUpdate(id, { date, category, description: description || '', amount, paid_from, status }, { new: true });
-      if (!doc) return null;
-      return { id: doc._id.toString(), month_id: doc.month_id.toString(), date: doc.date, category: doc.category, description: doc.description, amount: doc.amount, paid_from: doc.paid_from, status: doc.status };
+    if (isSupabaseReady()) {
+      const { data, error } = await supabase
+        .from('expenses')
+        .update({
+          date,
+          category,
+          description: description || '',
+          amount: parseFloat(amount),
+          paid_from,
+          status
+        })
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
     }
     const local = readLocal();
-    const idx = local.expenses.findIndex(e => String(e.id) === String(id));
+    const idx = local.expenses.findIndex((e) => String(e.id) === String(id));
     if (idx === -1) return null;
-    local.expenses[idx] = { ...local.expenses[idx], date, category, description: description || '', amount: parseFloat(amount), paid_from, status };
+    local.expenses[idx] = {
+      ...local.expenses[idx],
+      date,
+      category,
+      description: description || '',
+      amount: parseFloat(amount),
+      paid_from,
+      status
+    };
     writeLocal(local);
     return local.expenses[idx];
   },
 
   async deleteExpense(id) {
-    if (isMongoReady()) {
-      await ExpenseModel.findByIdAndDelete(id);
+    if (isSupabaseReady()) {
+      const { error } = await supabase.from('expenses').delete().eq('id', id);
+      if (error) throw error;
       return;
     }
     const local = readLocal();
-    local.expenses = local.expenses.filter(e => String(e.id) !== String(id));
+    local.expenses = local.expenses.filter((e) => String(e.id) !== String(id));
     writeLocal(local);
   },
 
   // ── Payments ─────────────────────────────────────────────────────────────────
   async getPaymentsByMonth(monthId) {
-    if (isMongoReady()) {
-      const docs = await PaymentModel.find({ month_id: monthId }).sort({ date: 1 });
-      return docs.map(d => ({ id: d._id.toString(), month_id: d.month_id.toString(), date: d.date, amount: d.amount, note: d.note }));
+    if (isSupabaseReady()) {
+      const { data, error } = await supabase
+        .from('payments')
+        .select('*')
+        .eq('month_id', monthId)
+        .order('date', { ascending: true })
+        .order('id', { ascending: true });
+      if (error) throw error;
+      return data || [];
     }
-    return readLocal().payments.filter(p => String(p.month_id) === String(monthId)).sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
+    return readLocal()
+      .payments.filter((p) => String(p.month_id) === String(monthId))
+      .sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
   },
 
   async createPayment({ month_id, date, amount, note }) {
-    if (isMongoReady()) {
-      const doc = await PaymentModel.create({ month_id, date, amount, note: note || '' });
-      return { id: doc._id.toString(), month_id: doc.month_id.toString(), date: doc.date, amount: doc.amount, note: doc.note };
+    if (isSupabaseReady()) {
+      const { data, error } = await supabase
+        .from('payments')
+        .insert([{
+          month_id,
+          date,
+          amount: parseFloat(amount),
+          note: note || ''
+        }])
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
     }
     const local = readLocal();
-    const newId = local.payments.length > 0 ? Math.max(...local.payments.map(p => p.id)) + 1 : 1;
-    const newPay = { id: newId, month_id: parseInt(month_id), date, amount: parseFloat(amount), note: note || '' };
+    const newId = local.payments.length > 0 ? Math.max(...local.payments.map((p) => p.id)) + 1 : 1;
+    const newPay = {
+      id: newId,
+      month_id: parseInt(month_id),
+      date,
+      amount: parseFloat(amount),
+      note: note || ''
+    };
     local.payments.push(newPay);
     writeLocal(local);
     return newPay;
   },
 
   async updatePayment(id, { date, amount, note }) {
-    if (isMongoReady()) {
-      const doc = await PaymentModel.findByIdAndUpdate(id, { date, amount, note: note || '' }, { new: true });
-      if (!doc) return null;
-      return { id: doc._id.toString(), month_id: doc.month_id.toString(), date: doc.date, amount: doc.amount, note: doc.note };
+    if (isSupabaseReady()) {
+      const { data, error } = await supabase
+        .from('payments')
+        .update({
+          date,
+          amount: parseFloat(amount),
+          note: note || ''
+        })
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
     }
     const local = readLocal();
-    const idx = local.payments.findIndex(p => String(p.id) === String(id));
+    const idx = local.payments.findIndex((p) => String(p.id) === String(id));
     if (idx === -1) return null;
-    local.payments[idx] = { ...local.payments[idx], date, amount: parseFloat(amount), note: note || '' };
+    local.payments[idx] = {
+      ...local.payments[idx],
+      date,
+      amount: parseFloat(amount),
+      note: note || ''
+    };
     writeLocal(local);
     return local.payments[idx];
   },
 
   async deletePayment(id) {
-    if (isMongoReady()) {
-      await PaymentModel.findByIdAndDelete(id);
+    if (isSupabaseReady()) {
+      const { error } = await supabase.from('payments').delete().eq('id', id);
+      if (error) throw error;
       return;
     }
     const local = readLocal();
-    local.payments = local.payments.filter(p => String(p.id) !== String(id));
+    local.payments = local.payments.filter((p) => String(p.id) !== String(id));
     writeLocal(local);
   }
 };
 
-module.exports = { db, isMongoReady };
+module.exports = { db, isSupabaseReady };

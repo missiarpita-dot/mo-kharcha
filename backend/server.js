@@ -14,8 +14,8 @@ app.use('/api/export',   require('./routes/export'));
 
 // Health check
 app.get('/api/health', (req, res) => {
-  const { isMongoReady } = require('./db');
-  res.json({ status: 'ok', database: isMongoReady() ? 'mongodb' : 'local-json' });
+  const { isSupabaseReady } = require('./db');
+  res.json({ status: 'ok', database: isSupabaseReady() ? 'supabase' : 'local-json' });
 });
 
 const PORT = process.env.PORT || 5000;
