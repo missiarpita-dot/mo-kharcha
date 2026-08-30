@@ -57,7 +57,7 @@ function readLocal() {
   try {
     return JSON.parse(fs.readFileSync(dbFile, 'utf-8'));
   } catch {
-    return { months: [], expenses: [], payments: [] };
+    return { months: [], expenses: [], payments: [], pin: '1234' };
   }
 }
 
@@ -71,6 +71,39 @@ function writeLocal(data) {
 
 // ─── Universal Database Adapter ──────────────────────────────────────────────
 const db = {
+  // ── PIN Auth ────────────────────────────────────────────────────────────────
+  async getPin() {
+    if (isSupabaseReady()) {
+      const { data, error } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'app_pin')
+        .maybeSingle();
+      if (!error && data && data.value) {
+        return String(data.value).trim();
+      }
+      await supabase.from('app_settings').upsert({ key: 'app_pin', value: '1234' });
+      return '1234';
+    }
+    const local = readLocal();
+    return String(local.pin || '1234').trim();
+  },
+
+  async setPin(newPin) {
+    const cleanPin = String(newPin).trim();
+    if (isSupabaseReady()) {
+      const { error } = await supabase
+        .from('app_settings')
+        .upsert({ key: 'app_pin', value: cleanPin });
+      if (error) throw error;
+      return true;
+    }
+    const local = readLocal();
+    local.pin = cleanPin;
+    writeLocal(local);
+    return true;
+  },
+
   // ── Months ──────────────────────────────────────────────────────────────────
   async getAllMonths() {
     if (isSupabaseReady()) {
