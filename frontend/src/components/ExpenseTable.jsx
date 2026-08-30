@@ -2,24 +2,27 @@ import { useState } from 'react'
 import { Pencil, Trash2, Plus, Loader2 } from 'lucide-react'
 import StatusBadge from './StatusBadge'
 import AddExpenseModal from './AddExpenseModal'
+import ConfirmModal from './ConfirmModal'
 import { deleteExpense } from '../api'
 import { formatINR } from '../utils'
 
 export default function ExpenseTable({ monthId, expenses, onRefresh }) {
   const [showAdd, setShowAdd] = useState(false)
   const [editing, setEditing] = useState(null)
-  const [deletingId, setDeletingId] = useState(null)
+  const [deletingItem, setDeletingItem] = useState(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this expense?')) return
-    setDeletingId(id)
+  const handleConfirmDelete = async () => {
+    if (!deletingItem) return
+    setIsDeleting(true)
     try {
-      await deleteExpense(id)
+      await deleteExpense(deletingItem.id)
       await onRefresh()
+      setDeletingItem(null)
     } catch (err) {
       alert(err.response?.data?.error || 'Failed to delete expense. Please try again.')
     } finally {
-      setDeletingId(null)
+      setIsDeleting(false)
     }
   }
 
@@ -102,16 +105,11 @@ export default function ExpenseTable({ monthId, expenses, onRefresh }) {
                         <Pencil size={15} />
                       </button>
                       <button
-                        onClick={() => handleDelete(exp.id)}
-                        disabled={deletingId === exp.id}
-                        className="p-1.5 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors disabled:opacity-50"
+                        onClick={() => setDeletingItem(exp)}
+                        className="p-1.5 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors"
                         title="Delete expense"
                       >
-                        {deletingId === exp.id ? (
-                          <Loader2 size={15} className="animate-spin text-red-600" />
-                        ) : (
-                          <Trash2 size={15} />
-                        )}
+                        <Trash2 size={15} />
                       </button>
                     </div>
                   </td>
@@ -151,6 +149,16 @@ export default function ExpenseTable({ monthId, expenses, onRefresh }) {
           onSaved={onRefresh}
         />
       )}
+      
+      {/* In-app Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!deletingItem}
+        title="Delete Expense"
+        message={`Are you sure you want to delete "${deletingItem?.category} - ${formatINR(deletingItem?.amount || 0)}"?`}
+        loading={isDeleting}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeletingItem(null)}
+      />
     </div>
   )
 }

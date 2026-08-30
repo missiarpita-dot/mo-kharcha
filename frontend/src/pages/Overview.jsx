@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getMonths, createMonth, deleteMonth } from '../api'
 import StatusBadge from '../components/StatusBadge'
+import ConfirmModal from '../components/ConfirmModal'
 import { MonthlyBarChart } from '../components/Charts'
 import { formatINR, MONTH_NAMES } from '../utils'
-import { Plus, Trash2, ChevronRight, TrendingDown, TrendingUp, Wallet, Loader2 } from 'lucide-react'
+import { Plus, Trash2, ChevronRight, TrendingDown, TrendingUp, Wallet } from 'lucide-react'
 
 const YEAR_OPTIONS = [2024, 2025, 2026, 2027, 2028]
 
@@ -15,7 +16,8 @@ export default function Overview() {
   const [newMonth, setNewMonth] = useState({ month: new Date().getMonth() + 1, year: new Date().getFullYear() })
   const [adding, setAdding] = useState(false)
   const [addError, setAddError] = useState('')
-  const [deletingId, setDeletingId] = useState(null)
+  const [deletingMonthItem, setDeletingMonthItem] = useState(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const navigate = useNavigate()
 
   const load = async () => {
@@ -52,17 +54,17 @@ export default function Overview() {
     }
   }
 
-  const handleDelete = async (e, id) => {
-    e.stopPropagation()
-    if (!window.confirm('Delete this entire month and all its expenses & payments?')) return
-    setDeletingId(id)
+  const handleConfirmDeleteMonth = async () => {
+    if (!deletingMonthItem) return
+    setIsDeleting(true)
     try {
-      await deleteMonth(id)
+      await deleteMonth(deletingMonthItem.id)
       await load()
+      setDeletingMonthItem(null)
     } catch (err) {
       alert(err.response?.data?.error || 'Failed to delete month. Please try again.')
     } finally {
-      setDeletingId(null)
+      setIsDeleting(false)
     }
   }
 
@@ -161,15 +163,14 @@ export default function Overview() {
                     <td className="table-td text-right tabular-nums font-semibold">{formatINR(m.closingBalance)}</td>
                     <td className="table-td"><StatusBadge status={m.status} /></td>
                     <td className="table-td text-right">
-                      <button onClick={(e) => handleDelete(e, m.id)}
-                        disabled={deletingId === m.id}
-                        className="p-1.5 text-slate-300 hover:text-red-500 rounded hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all disabled:opacity-100"
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setDeletingMonthItem(m)
+                        }}
+                        className="p-1.5 text-slate-300 hover:text-red-500 rounded hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
                         title="Delete month">
-                        {deletingId === m.id ? (
-                          <Loader2 size={14} className="animate-spin text-red-500" />
-                        ) : (
-                          <Trash2 size={14} />
-                        )}
+                        <Trash2 size={14} />
                       </button>
                     </td>
                   </tr>
@@ -236,6 +237,16 @@ export default function Overview() {
           </div>
         </div>
       )}
+
+      {/* In-app Month Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!deletingMonthItem}
+        title="Delete Entire Month"
+        message={`Are you sure you want to delete "${deletingMonthItem?.name}" and all its expenses and payments? This cannot be undone.`}
+        loading={isDeleting}
+        onConfirm={handleConfirmDeleteMonth}
+        onCancel={() => setDeletingMonthItem(null)}
+      />
     </div>
   )
 }
