@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Pencil, Trash2, Plus } from 'lucide-react'
+import { Pencil, Trash2, Plus, Loader2 } from 'lucide-react'
 import StatusBadge from './StatusBadge'
 import AddExpenseModal from './AddExpenseModal'
 import { deleteExpense } from '../api'
@@ -8,14 +8,22 @@ import { formatINR } from '../utils'
 export default function ExpenseTable({ monthId, expenses, onRefresh }) {
   const [showAdd, setShowAdd] = useState(false)
   const [editing, setEditing] = useState(null)
+  const [deletingId, setDeletingId] = useState(null)
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete this expense?')) return
-    await deleteExpense(id)
-    onRefresh()
+    if (!window.confirm('Are you sure you want to delete this expense?')) return
+    setDeletingId(id)
+    try {
+      await deleteExpense(id)
+      await onRefresh()
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to delete expense. Please try again.')
+    } finally {
+      setDeletingId(null)
+    }
   }
 
-  const total = expenses.reduce((s, e) => s + e.amount, 0)
+  const total = expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0)
 
   return (
     <div className="card overflow-hidden">
@@ -25,7 +33,10 @@ export default function ExpenseTable({ monthId, expenses, onRefresh }) {
           <p className="text-xs text-blue-300 uppercase tracking-widest font-medium">Section 1</p>
           <h2 className="text-white font-semibold text-base">Monthly Expenses</h2>
         </div>
-        <button onClick={() => setShowAdd(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm transition-colors">
+        <button
+          onClick={() => setShowAdd(true)}
+          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white/15 hover:bg-white/25 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
+        >
           <Plus size={15} /> Add Expense
         </button>
       </div>
@@ -34,48 +45,73 @@ export default function ExpenseTable({ monthId, expenses, onRefresh }) {
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="border-b border-slate-100">
+            <tr className="border-b border-slate-100 bg-slate-50/75">
               <th className="table-th">Date</th>
               <th className="table-th">Category</th>
               <th className="table-th">Description</th>
               <th className="table-th text-right">Amount</th>
               <th className="table-th">Paid From</th>
               <th className="table-th">Status</th>
-              <th className="table-th w-20">Actions</th>
+              <th className="table-th text-right w-24">Actions</th>
             </tr>
           </thead>
           <tbody>
             {expenses.length === 0 ? (
               <tr>
-                <td colSpan={7} className="text-center py-10 text-slate-400 text-sm">
-                  No expenses yet. Click "Add Expense" to get started.
+                <td colSpan={7} className="text-center py-12 text-slate-400 text-sm">
+                  No expenses added for this month yet. Click "Add Expense" above.
                 </td>
               </tr>
             ) : (
               expenses.map((exp, i) => (
-                <tr key={exp.id}
-                  className={`border-b border-slate-50 hover:bg-slate-50 transition-colors ${i % 2 === 1 ? 'bg-slate-50/50' : ''}`}>
-                  <td className="table-td font-mono text-xs">{exp.date}</td>
+                <tr
+                  key={exp.id}
+                  className={`border-b border-slate-50 hover:bg-blue-50/30 transition-colors ${
+                    i % 2 === 1 ? 'bg-slate-50/50' : ''
+                  }`}
+                >
+                  <td className="table-td font-mono text-xs text-slate-600">{exp.date}</td>
                   <td className="table-td">
-                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-medium">
+                    <span className="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-md text-xs font-semibold">
                       {exp.category}
                     </span>
                   </td>
-                  <td className="table-td text-slate-500">{exp.description || '—'}</td>
-                  <td className="table-td text-right font-semibold text-slate-800">{formatINR(exp.amount)}</td>
+                  <td className="table-td text-slate-600">{exp.description || '—'}</td>
+                  <td className="table-td text-right font-semibold text-slate-800 tabular-nums">
+                    {formatINR(exp.amount)}
+                  </td>
                   <td className="table-td">
-                    <span className={`text-xs font-medium ${exp.paid_from === 'Own Money' ? 'text-orange-600' : 'text-slate-500'}`}>
+                    <span
+                      className={`text-xs font-semibold ${
+                        exp.paid_from === 'Own Money' ? 'text-orange-600' : 'text-slate-600'
+                      }`}
+                    >
                       {exp.paid_from === 'Own Money' ? '👤 Own' : "👴 Father's"}
                     </span>
                   </td>
-                  <td className="table-td"><StatusBadge status={exp.status} /></td>
                   <td className="table-td">
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => setEditing(exp)} className="p-1.5 text-slate-400 hover:text-blue-600 rounded hover:bg-blue-50 transition-colors">
-                        <Pencil size={14} />
+                    <StatusBadge status={exp.status} />
+                  </td>
+                  <td className="table-td text-right">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        onClick={() => setEditing(exp)}
+                        className="p-1.5 text-slate-400 hover:text-blue-600 rounded-md hover:bg-blue-50 transition-colors"
+                        title="Edit expense"
+                      >
+                        <Pencil size={15} />
                       </button>
-                      <button onClick={() => handleDelete(exp.id)} className="p-1.5 text-slate-400 hover:text-red-600 rounded hover:bg-red-50 transition-colors">
-                        <Trash2 size={14} />
+                      <button
+                        onClick={() => handleDelete(exp.id)}
+                        disabled={deletingId === exp.id}
+                        className="p-1.5 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors disabled:opacity-50"
+                        title="Delete expense"
+                      >
+                        {deletingId === exp.id ? (
+                          <Loader2 size={15} className="animate-spin text-red-600" />
+                        ) : (
+                          <Trash2 size={15} />
+                        )}
                       </button>
                     </div>
                   </td>
@@ -85,11 +121,13 @@ export default function ExpenseTable({ monthId, expenses, onRefresh }) {
           </tbody>
           {expenses.length > 0 && (
             <tfoot>
-              <tr className="bg-amber-50 border-t-2 border-amber-200">
-                <td colSpan={3} className="px-4 py-3 text-sm font-semibold text-slate-600 text-right">
+              <tr className="bg-amber-50/80 border-t-2 border-amber-200">
+                <td colSpan={3} className="px-4 py-3 text-sm font-semibold text-slate-700 text-right">
                   Total Expenses (this month)
                 </td>
-                <td className="px-4 py-3 text-right font-bold text-slate-800">{formatINR(total)}</td>
+                <td className="px-4 py-3 text-right font-bold text-slate-900 tabular-nums">
+                  {formatINR(total)}
+                </td>
                 <td colSpan={3}></td>
               </tr>
             </tfoot>
@@ -99,10 +137,19 @@ export default function ExpenseTable({ monthId, expenses, onRefresh }) {
 
       {/* Modals */}
       {showAdd && (
-        <AddExpenseModal monthId={monthId} onClose={() => setShowAdd(false)} onSaved={onRefresh} />
+        <AddExpenseModal
+          monthId={monthId}
+          onClose={() => setShowAdd(false)}
+          onSaved={onRefresh}
+        />
       )}
       {editing && (
-        <AddExpenseModal monthId={monthId} expense={editing} onClose={() => setEditing(null)} onSaved={onRefresh} />
+        <AddExpenseModal
+          monthId={monthId}
+          expense={editing}
+          onClose={() => setEditing(null)}
+          onSaved={onRefresh}
+        />
       )}
     </div>
   )

@@ -4,7 +4,7 @@ import { getMonths, createMonth, deleteMonth } from '../api'
 import StatusBadge from '../components/StatusBadge'
 import { MonthlyBarChart } from '../components/Charts'
 import { formatINR, MONTH_NAMES } from '../utils'
-import { Plus, Trash2, ChevronRight, TrendingDown, TrendingUp, Wallet } from 'lucide-react'
+import { Plus, Trash2, ChevronRight, TrendingDown, TrendingUp, Wallet, Loader2 } from 'lucide-react'
 
 const YEAR_OPTIONS = [2024, 2025, 2026, 2027, 2028]
 
@@ -15,13 +15,16 @@ export default function Overview() {
   const [newMonth, setNewMonth] = useState({ month: new Date().getMonth() + 1, year: new Date().getFullYear() })
   const [adding, setAdding] = useState(false)
   const [addError, setAddError] = useState('')
+  const [deletingId, setDeletingId] = useState(null)
   const navigate = useNavigate()
 
   const load = async () => {
     setLoading(true)
     try {
       const res = await getMonths()
-      setMonths(res.data)
+      setMonths(res.data || [])
+    } catch (err) {
+      console.error('Failed to load months:', err)
     } finally {
       setLoading(false)
     }
@@ -29,9 +32,9 @@ export default function Overview() {
 
   useEffect(() => { load() }, [])
 
-  const cumExpenses  = months.reduce((s, m) => s + m.totalExpenses, 0)
-  const cumReceived  = months.reduce((s, m) => s + m.totalReceived, 0)
-  const netBalance   = months.length > 0 ? months[months.length - 1].closingBalance : 0
+  const cumExpenses  = months.reduce((s, m) => s + (Number(m.totalExpenses) || 0), 0)
+  const cumReceived  = months.reduce((s, m) => s + (Number(m.totalReceived) || 0), 0)
+  const netBalance   = months.length > 0 ? (Number(months[months.length - 1].closingBalance) || 0) : 0
 
   const handleAddMonth = async (e) => {
     e.preventDefault()
@@ -41,7 +44,7 @@ export default function Overview() {
     try {
       await createMonth({ name, year: newMonth.year, month: newMonth.month })
       setShowAddMonth(false)
-      load()
+      await load()
     } catch (err) {
       setAddError(err.response?.data?.error || 'Failed to create month.')
     } finally {
@@ -51,9 +54,16 @@ export default function Overview() {
 
   const handleDelete = async (e, id) => {
     e.stopPropagation()
-    if (!window.confirm('Delete this month and all its data?')) return
-    await deleteMonth(id)
-    load()
+    if (!window.confirm('Delete this entire month and all its expenses & payments?')) return
+    setDeletingId(id)
+    try {
+      await deleteMonth(id)
+      await load()
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to delete month. Please try again.')
+    } finally {
+      setDeletingId(null)
+    }
   }
 
   return (
@@ -124,14 +134,14 @@ export default function Overview() {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-slate-100">
+                <tr className="border-b border-slate-100 bg-slate-50/75">
                   <th className="table-th">Month</th>
                   <th className="table-th text-right">Opening Due</th>
                   <th className="table-th text-right">Total Expenses</th>
                   <th className="table-th text-right">Total Received</th>
                   <th className="table-th text-right">Closing Due</th>
                   <th className="table-th">Status</th>
-                  <th className="table-th w-16"></th>
+                  <th className="table-th w-16 text-right"></th>
                 </tr>
               </thead>
               <tbody>
@@ -150,10 +160,16 @@ export default function Overview() {
                     <td className="table-td text-right tabular-nums text-green-600 font-medium">{formatINR(m.totalReceived)}</td>
                     <td className="table-td text-right tabular-nums font-semibold">{formatINR(m.closingBalance)}</td>
                     <td className="table-td"><StatusBadge status={m.status} /></td>
-                    <td className="table-td">
+                    <td className="table-td text-right">
                       <button onClick={(e) => handleDelete(e, m.id)}
-                        className="p-1.5 text-slate-300 hover:text-red-500 rounded hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all">
-                        <Trash2 size={14} />
+                        disabled={deletingId === m.id}
+                        className="p-1.5 text-slate-300 hover:text-red-500 rounded hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all disabled:opacity-100"
+                        title="Delete month">
+                        {deletingId === m.id ? (
+                          <Loader2 size={14} className="animate-spin text-red-500" />
+                        ) : (
+                          <Trash2 size={14} />
+                        )}
                       </button>
                     </td>
                   </tr>
