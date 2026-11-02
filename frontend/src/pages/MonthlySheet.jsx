@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { getMonth, getExpenses, getPayments } from '../api'
+import { getMonths, getMonth, getExpenses, getPayments } from '../api'
 import ExpenseTable from '../components/ExpenseTable'
 import PaymentsTable from '../components/PaymentsTable'
 import MonthlySummary from '../components/MonthlySummary'
@@ -22,9 +22,18 @@ export default function MonthlySheet() {
         getExpenses(id),
         getPayments(id),
       ])
+      if (!sumRes.data) {
+        const allRes = await getMonths()
+        if (allRes.data && allRes.data.length > 0) {
+          window.location.replace(`/month/${allRes.data[0].id}`)
+          return
+        }
+      }
       setSummary(sumRes.data)
       setExpenses(expRes.data)
       setPayments(payRes.data)
+    } catch (err) {
+      console.error('Error loading month:', err)
     } finally {
       setLoading(false)
     }

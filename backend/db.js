@@ -28,6 +28,28 @@ for (const ep of envPaths) {
   }
 }
 
+// ─── Local JSON Backup Helper ────────────────────────────────────────────────
+const DB_FILE = path.join(__dirname, 'data', 'db.json');
+
+function readBackup() {
+  try {
+    if (fs.existsSync(DB_FILE)) {
+      return JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
+    }
+  } catch (e) {
+    console.warn('⚠️ Could not read local backup:', e.message);
+  }
+  return { months: [], expenses: [], payments: [], pin: '1986' };
+}
+
+function writeBackup(data) {
+  if (process.env.VERCEL) return; // Vercel filesystem is read-only
+  try {
+    fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
+    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  } catch {}
+}
+
 // ─── Supabase Client Setup with Guaranteed Cloud Fallback ───────────────────
 const DEFAULT_SUPABASE_URL = 'https://zbjzrdasvdlenvfmrsjd.supabase.co';
 const DEFAULT_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpianpyZGFzdmRsZW52Zm1yc2pkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgwOTIwNzgsImV4cCI6MjEwMzY2ODA3OH0.Ep_opStvzEO9XYZat0RSS2tN4ETljyafBMAhxmajA5E';
@@ -51,23 +73,46 @@ function isSupabaseReady() {
   return supabase !== null;
 }
 
-// ─── Universal Database Adapter ──────────────────────────────────────────────
+// ─── Universal Database Adapter (with Auto Keep-Alive & Backup Fallback) ────
 const db = {
+  // ── Keep-Alive Ping ─────────────────────────────────────────────────────────
+  async keepAlive() {
+    if (isSupabaseReady()) {
+      try {
+        const now = new Date().toISOString();
+        await supabase
+          .from('app_settings')
+          .upsert({ key: 'last_keepalive', value: now });
+        return { ok: true, source: 'supabase', timestamp: now };
+      } catch (err) {
+        return { ok: false, source: 'fallback', error: err.message };
+      }
+    }
+    return { ok: false, source: 'no-client' };
+  },
+
   // ── PIN Auth ────────────────────────────────────────────────────────────────
   async getPin() {
     if (isSupabaseReady()) {
-      const { data, error } = await supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'app_pin')
-        .maybeSingle();
-      if (!error && data && data.value) {
-        return String(data.value).trim();
+      try {
+        const { data, error } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'app_pin')
+          .maybeSingle();
+        if (!error && data && data.value) {
+          return String(data.value).trim();
+        }
+        if (!error) {
+          await supabase.from('app_settings').upsert({ key: 'app_pin', value: '1986' });
+          return '1986';
+        }
+      } catch (e) {
+        console.warn('⚠️ Supabase getPin fallback triggered:', e.message);
       }
-      await supabase.from('app_settings').upsert({ key: 'app_pin', value: '1986' });
-      return '1986';
     }
-    return '1986';
+    const backup = readBackup();
+    return String(backup.pin || '1986').trim();
   },
 
   async setPin(newPin) {
@@ -77,36 +122,48 @@ const db = {
         .from('app_settings')
         .upsert({ key: 'app_pin', value: cleanPin });
       if (error) throw error;
-      return true;
     }
+    const backup = readBackup();
+    backup.pin = cleanPin;
+    writeBackup(backup);
     return true;
   },
 
   // ── Months ──────────────────────────────────────────────────────────────────
   async getAllMonths() {
     if (isSupabaseReady()) {
-      const { data, error } = await supabase
-        .from('months')
-        .select('*')
-        .order('year', { ascending: true })
-        .order('month', { ascending: true });
-      if (error) throw error;
-      return data || [];
+      try {
+        const { data, error } = await supabase
+          .from('months')
+          .select('*')
+          .order('year', { ascending: true })
+          .order('month', { ascending: true });
+        if (!error && data) return data;
+        if (error) console.warn('⚠️ Supabase getAllMonths error, using fallback:', error.message);
+      } catch (e) {
+        console.warn('⚠️ Supabase getAllMonths unreachable, using fallback:', e.message);
+      }
     }
-    return [];
+    const backup = readBackup();
+    return (backup.months || []).sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month);
   },
 
   async getMonthById(id) {
     if (isSupabaseReady()) {
-      const { data, error } = await supabase
-        .from('months')
-        .select('*')
-        .eq('id', id)
-        .single();
-      if (error && error.code !== 'PGRST116') throw error;
-      return data || null;
+      try {
+        const { data, error } = await supabase
+          .from('months')
+          .select('*')
+          .eq('id', id)
+          .single();
+        if (!error && data) return data;
+        if (error && error.code === 'PGRST116') return null;
+      } catch (e) {
+        console.warn('⚠️ Supabase getMonthById fallback:', e.message);
+      }
     }
-    return null;
+    const backup = readBackup();
+    return (backup.months || []).find(m => String(m.id) === String(id)) || null;
   },
 
   async createMonth({ name, year, month }) {
@@ -144,16 +201,23 @@ const db = {
   // ── Expenses ─────────────────────────────────────────────────────────────────
   async getExpensesByMonth(monthId) {
     if (isSupabaseReady()) {
-      const { data, error } = await supabase
-        .from('expenses')
-        .select('*')
-        .eq('month_id', monthId)
-        .order('date', { ascending: true })
-        .order('id', { ascending: true });
-      if (error) throw error;
-      return data || [];
+      try {
+        const { data, error } = await supabase
+          .from('expenses')
+          .select('*')
+          .eq('month_id', monthId)
+          .order('date', { ascending: true })
+          .order('id', { ascending: true });
+        if (!error && data) return data;
+        if (error) console.warn('⚠️ Supabase getExpensesByMonth error, using fallback:', error.message);
+      } catch (e) {
+        console.warn('⚠️ Supabase getExpensesByMonth fallback:', e.message);
+      }
     }
-    return [];
+    const backup = readBackup();
+    return (backup.expenses || [])
+      .filter(e => String(e.month_id) === String(monthId))
+      .sort((a, b) => String(a.date).localeCompare(String(b.date)) || a.id - b.id);
   },
 
   async createExpense({ month_id, date, category, description, amount, paid_from }) {
@@ -212,16 +276,23 @@ const db = {
   // ── Payments ─────────────────────────────────────────────────────────────────
   async getPaymentsByMonth(monthId) {
     if (isSupabaseReady()) {
-      const { data, error } = await supabase
-        .from('payments')
-        .select('*')
-        .eq('month_id', monthId)
-        .order('date', { ascending: true })
-        .order('id', { ascending: true });
-      if (error) throw error;
-      return data || [];
+      try {
+        const { data, error } = await supabase
+          .from('payments')
+          .select('*')
+          .eq('month_id', monthId)
+          .order('date', { ascending: true })
+          .order('id', { ascending: true });
+        if (!error && data) return data;
+        if (error) console.warn('⚠️ Supabase getPaymentsByMonth error, using fallback:', error.message);
+      } catch (e) {
+        console.warn('⚠️ Supabase getPaymentsByMonth fallback:', e.message);
+      }
     }
-    return [];
+    const backup = readBackup();
+    return (backup.payments || [])
+      .filter(p => String(p.month_id) === String(monthId))
+      .sort((a, b) => String(a.date).localeCompare(String(b.date)) || a.id - b.id);
   },
 
   async createPayment({ month_id, date, amount, note }) {

@@ -28,10 +28,15 @@ app.use('/payments',     paymentsRouter);
 app.use('/api/export',   exportRouter);
 app.use('/export',       exportRouter);
 
-// Health check
-app.get(['/api/health', '/health'], (req, res) => {
-  const { isSupabaseReady } = require('./db');
-  res.json({ status: 'ok', database: isSupabaseReady() ? 'supabase' : 'local-json' });
+// Health & Auto Keep-Alive endpoint (also used by Vercel Cron to prevent Supabase pause)
+app.get(['/api/health', '/health', '/api/keepalive', '/keepalive'], async (req, res) => {
+  const { db, isSupabaseReady } = require('./db');
+  const ping = await db.keepAlive();
+  res.json({
+    status: 'ok',
+    database: isSupabaseReady() && ping.ok ? 'supabase' : 'backup-fallback',
+    keepAlive: ping
+  });
 });
 
 const PORT = process.env.PORT || 5000;

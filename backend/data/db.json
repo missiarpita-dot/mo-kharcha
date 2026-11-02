@@ -1,75 +1,65 @@
 {
   "months": [
     {
-      "id": 1,
-      "name": "July 2026",
-      "year": 2026,
-      "month": 7,
-      "created_at": "2026-07-01T00:00:00.000Z"
-    },
-    {
       "id": 2,
       "name": "August 2026",
       "year": 2026,
       "month": 8,
-      "created_at": "2026-08-01T00:00:00.000Z"
+      "created_at": "2026-08-01T00:00:00+00:00"
+    },
+    {
+      "id": 4,
+      "name": "September 2026",
+      "year": 2026,
+      "month": 9,
+      "created_at": "2026-09-16T17:00:05.421071+00:00"
     }
   ],
   "expenses": [
     {
-      "id": 1,
-      "month_id": 1,
-      "date": "2026-07-03",
-      "category": "Electricity",
-      "description": "Electric bill",
-      "amount": 2194,
-      "paid_from": "Own Money",
-      "status": "Due from Father"
-    },
-    {
-      "id": 3,
-      "month_id": 1,
-      "date": "2026-07-07",
-      "category": "Newspaper",
-      "description": "Newspaper bill",
-      "amount": 300,
-      "paid_from": "Father's Money",
-      "status": "Settled"
-    },
-    {
-      "id": 4,
-      "month_id": 1,
-      "date": "2026-07-10",
-      "category": "Groceries",
-      "description": "Ration/grocery expense",
-      "amount": 3200,
-      "paid_from": "Own Money",
-      "status": "Due from Father"
-    },
-    {
-      "id": 5,
-      "month_id": 1,
-      "date": "2026-07-12",
-      "category": "Medicine",
-      "description": "Mother's homeopathy medicine",
-      "amount": 970,
-      "paid_from": "Own Money",
-      "status": "Due from Father"
-    },
-    {
       "id": 6,
       "month_id": 2,
-      "date": "2026-08-18",
+      "date": "2026-08-04",
       "category": "Electricity",
-      "description": "",
+      "description": "July Electric bill",
       "amount": 1049,
       "paid_from": "Own Money",
       "status": "Due from Father"
     },
     {
-      "id": 7,
+      "id": 11,
       "month_id": 2,
-      "date": "2026-08-19",
+      "date": "2026-08-17",
+      "category": "Internet",
+      "description": "Jio fiber bill",
+      "amount": 706.82,
+      "paid_from": "Own Money",
+      "status": "Due from Father"
+    },
+    {
+      "id": 13,
+      "month_id": 4,
+      "date": "2026-09-11",
+      "category": "Mobile Recharge",
+      "description": "Bapa ph recharge",
+      "amount": 490.9,
+      "paid_from": "Own Money",
+      "status": "Due from Father"
+    },
+    {
+      "id": 12,
+      "month_id": 4,
+      "date": "2026-09-16",
+      "category": "Electricity",
+      "description": "August month electricity bill",
+      "amount": 1176,
+      "paid_from": "Own Money",
+      "status": "Due from Father"
+    },
+    {
+      "id": 14,
+      "month_id": 4,
+      "date": "2026-09-17",
       "category": "Internet",
       "description": "Jio fiber bill",
       "amount": 706.82,
@@ -79,11 +69,11 @@
   ],
   "payments": [
     {
-      "id": 1,
-      "month_id": 1,
-      "date": "2026-07-02",
-      "amount": 6000,
-      "note": "July allowance"
+      "id": 2,
+      "month_id": 2,
+      "date": "2026-08-03",
+      "amount": 18000,
+      "note": "August allowance + July balance adjustment"
     }
   ],
   "pin": "1986"

@@ -5,13 +5,14 @@ import StatusBadge from '../components/StatusBadge'
 import ConfirmModal from '../components/ConfirmModal'
 import { MonthlyBarChart } from '../components/Charts'
 import { formatINR, MONTH_NAMES } from '../utils'
-import { Plus, Trash2, ChevronRight, TrendingDown, TrendingUp, Wallet } from 'lucide-react'
+import { Plus, Trash2, ChevronRight, TrendingDown, TrendingUp, Wallet, RefreshCw } from 'lucide-react'
 
 const YEAR_OPTIONS = [2024, 2025, 2026, 2027, 2028]
 
 export default function Overview() {
   const [months, setMonths] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [showAddMonth, setShowAddMonth] = useState(false)
   const [newMonth, setNewMonth] = useState({ month: new Date().getMonth() + 1, year: new Date().getFullYear() })
   const [adding, setAdding] = useState(false)
@@ -20,13 +21,19 @@ export default function Overview() {
   const [isDeleting, setIsDeleting] = useState(false)
   const navigate = useNavigate()
 
-  const load = async () => {
+  const load = async (retryCount = 0) => {
     setLoading(true)
+    setLoadError('')
     try {
       const res = await getMonths()
       setMonths(res.data || [])
     } catch (err) {
       console.error('Failed to load months:', err)
+      if (retryCount < 2) {
+        setTimeout(() => load(retryCount + 1), 1500)
+        return
+      }
+      setLoadError('Database waking up or connection slow. Click Retry to load your data.')
     } finally {
       setLoading(false)
     }
@@ -76,10 +83,29 @@ export default function Overview() {
           <h1 className="text-2xl font-bold text-slate-900">Household Expense Ledger</h1>
           <p className="text-slate-500 text-sm mt-1">Monthly Overview · All amounts in Indian Rupees (₹)</p>
         </div>
-        <button onClick={() => setShowAddMonth(true)} className="btn-primary">
-          <Plus size={16} /> Add New Month
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => load(0)}
+            disabled={loading}
+            className="btn-secondary"
+            title="Refresh data"
+          >
+            <RefreshCw size={15} className={loading ? 'animate-spin' : ''} /> Refresh
+          </button>
+          <button onClick={() => setShowAddMonth(true)} className="btn-primary">
+            <Plus size={16} /> Add New Month
+          </button>
+        </div>
       </div>
+
+      {loadError && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between text-amber-800 text-sm">
+          <span>{loadError}</span>
+          <button onClick={() => load(0)} className="px-3 py-1.5 bg-amber-600 text-white rounded-lg font-medium hover:bg-amber-700">
+            Retry Now
+          </button>
+        </div>
+      )}
 
       {/* Summary Cards */}
       {months.length > 0 && (
